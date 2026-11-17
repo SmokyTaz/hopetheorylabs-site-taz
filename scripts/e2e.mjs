@@ -57,8 +57,16 @@ async function open(path, options = {}) {
 
 async function axeViolations(page) {
   // Let reveal fades finish: mid-transition text is part-transparent and axe would
-  // measure contrast for a frame no visitor reads. Checks the settled page only.
-  await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {}))));
+  // measure contrast for a frame no visitor reads. Only finite animations: the
+  // contact ticker loops forever and its `finished` never resolves.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+        .map((animation) => animation.finished.catch(() => {})),
+    ),
+  );
   await page.addScriptTag({ content: AXE });
   return page.evaluate(async () => {
     const result = await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "best-practice"] });
