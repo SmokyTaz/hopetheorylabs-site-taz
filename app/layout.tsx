@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { AssistantLauncher } from "@/components/assistant/AssistantLauncher";
 import { en } from "@/content/en";
 import { CONTACT_EMAIL, WHATSAPP_E164, whatsappLink } from "@/content/types";
-import { SITE_NAME, SITE_URL } from "@/lib/metadata";
+import { BASE_OPEN_GRAPH, BASE_TWITTER, HOME_SHARE, SITE_NAME, SITE_URL } from "@/lib/metadata";
 import { Instrument_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 
@@ -32,18 +32,12 @@ export const metadata: Metadata = {
   description:
     "Fast, mobile-first websites for Dhaka businesses from ৳10,000. WhatsApp ordering, cash on delivery, fixed prices. Free concept before you pay. AI services in early access.",
   openGraph: {
-    title: "Hope Theory Labs",
-    description: "Mobile websites with WhatsApp orders. From ৳10,000. Based in Dhaka.",
-    type: "website",
-    siteName: SITE_NAME,
-    locale: "en_US",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Hope Theory Labs — Your data. Connected. Your business. Smarter." }],
+    ...BASE_OPEN_GRAPH,
+    ...HOME_SHARE,
   },
   twitter: {
-    card: "summary_large_image",
-    title: "Hope Theory Labs",
-    description: "Mobile websites with WhatsApp orders. From ৳10,000. Based in Dhaka.",
-    images: ["/og.png"],
+    ...BASE_TWITTER,
+    ...HOME_SHARE,
   },
   robots: { index: true, follow: true },
 };

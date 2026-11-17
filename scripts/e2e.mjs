@@ -82,6 +82,12 @@ describe("every route", () => {
           title: document.title,
           canonical: document.querySelector("link[rel=canonical]")?.getAttribute("href"),
           ogUrl: document.querySelector("meta[property='og:url']")?.getAttribute("content"),
+          share: Object.fromEntries(
+            ["og:image", "og:type", "og:site_name", "og:title", "twitter:card", "twitter:image"].map((key) => [
+              key,
+              document.querySelector(`meta[property='${key}'], meta[name='${key}']`)?.getAttribute("content") ?? null,
+            ]),
+          ),
           h1: document.querySelectorAll("h1").length,
           h1Size: parseFloat(getComputedStyle(document.querySelector("h1") ?? document.body).fontSize),
           firstFocusable: document.querySelector("a[href], button")?.className,
@@ -94,6 +100,19 @@ describe("every route", () => {
         const expected = route === "/" ? SITE : `${SITE}${route}`;
         assert.equal(info.canonical, expected, "canonical points at this route");
         assert.equal(info.ogUrl, expected, "og:url points at this route");
+        // Page-level openGraph/twitter replace the layout's, so check the whole share card survives.
+        assert.deepEqual(
+          { ...info.share, "og:title": Boolean(info.share["og:title"]) },
+          {
+            "og:image": `${SITE}/og.png`,
+            "og:type": "website",
+            "og:site_name": "Hope Theory Labs",
+            "og:title": true,
+            "twitter:card": "summary_large_image",
+            "twitter:image": `${SITE}/og.png`,
+          },
+          "complete share card",
+        );
         titles.set(route, info.title);
 
         const ids = new Set(info.ids);
