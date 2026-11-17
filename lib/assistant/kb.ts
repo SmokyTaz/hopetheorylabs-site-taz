@@ -4,7 +4,8 @@
  * Every fact is derived from `content/en.ts` at import time, so the assistant
  * cannot drift from the approved site copy. Do not add price, client or
  * credential text here: anything the site does not say, the assistant must not
- * say either. `npm test` fails if this file starts carrying its own ৳ figures.
+ * say either. `npm test` fails if this file starts carrying its own ৳ figures
+ * (scripts/test-api.mjs, "kb carries no hardcoded prices").
  */
 import { en } from "../../content/en";
 import { whatsappLink } from "../../content/types";
@@ -55,11 +56,20 @@ export const FACTS_LINES: readonly string[] = [
   `Contact: ${FACTS.contact}`,
 ];
 
+/*
+ * Any amount of money: "৳12,000", "12000 taka", "Tk. 12,000", "12k tk",
+ * "১২০০০ টাকা". Bengali digits are folded to ASCII first (see priceHits),
+ * because the model is told to answer in Bangla when the visitor does.
+ */
 const PRICE_PATTERNS: readonly RegExp[] = [
-  /৳\s?[\d,]+/g,
-  /[\d][\d,]{2,}\s*(?:taka|tk|bdt)\b/gi,
-  /\b(?:taka|tk|bdt)\s*[\d][\d,]{2,}/gi,
+  /৳\s?\d[\d,]*/g,
+  /\d[\d,]*\s*k?\s*(?:taka|tk|bdt|টাকা)/gi,
+  /\b(?:taka|tk|bdt)\.?\s*\d[\d,]*/gi,
 ];
+
+function toAsciiDigits(text: string): string {
+  return text.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6));
+}
 
 interface PriceHit {
   raw: string;
@@ -68,8 +78,9 @@ interface PriceHit {
 
 function priceHits(text: string): PriceHit[] {
   const hits: PriceHit[] = [];
+  const normalized = toAsciiDigits(text);
   for (const pattern of PRICE_PATTERNS) {
-    for (const match of text.matchAll(pattern)) {
+    for (const match of normalized.matchAll(pattern)) {
       const digits = match[0].replace(/[^\d]/g, "");
       if (digits) hits.push({ raw: match[0].trim(), digits });
     }
@@ -86,10 +97,6 @@ export function unknownPrice(text: string): string | null {
     if (!ALLOWED_PRICES.has(hit.digits)) return hit.raw;
   }
   return null;
-}
-
-export function hasBangla(text: string): boolean {
-  return /[\u0980-\u09FF]/.test(text);
 }
 
 export const HANDOFF_REPLY = `${en.assistant.handoff} ${WHATSAPP}`;

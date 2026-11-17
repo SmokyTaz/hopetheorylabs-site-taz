@@ -2,18 +2,25 @@
 
 import type { FormEvent } from "react";
 
+import { whatsappLink, whatsappWith } from "@/content/types";
+
+import { Heading, type HeadingLevel } from "./Heading";
 import { SectionMarker } from "./SectionMarker";
 import { useContent } from "./LanguageProvider";
 
-export function Contact() {
+/*
+  Without JavaScript the form submits as a GET to wa.me, which reads `text`
+  (the need). With JavaScript the name is folded into the message first.
+*/
+export function Contact({ headingLevel = 2 }: { headingLevel?: HeadingLevel }) {
   const content = useContent();
   function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
-    const need = String(form.get("need") ?? "").trim();
+    const need = String(form.get("text") ?? "").trim();
     const message = "Hi Hope Theory Labs, I’m " + (name || "a visitor") + ". " + need;
-    window.open("https://wa.me/8801718463471?text=" + encodeURIComponent(message), "_blank", "noopener,noreferrer");
+    window.open(whatsappWith(message), "_blank", "noopener,noreferrer");
   }
   return (
     <section id="contact" className="contact-section border-b border-paper/10" aria-labelledby="contact-heading">
@@ -21,16 +28,16 @@ export function Contact() {
       <div className="contact-grid contact-grid-html">
         <div className="contact-intro scene-copy">
           <p className="eyebrow">{content.contact.eyebrow}</p>
-          <h2 id="contact-heading">{content.contact.heading}</h2>
+          <Heading level={headingLevel} id="contact-heading">{content.contact.heading}</Heading>
           <p>{content.contact.note}</p>
-          <form className="contact-form" onSubmit={sendMessage}>
+          <form className="contact-form" action={whatsappLink} method="get" target="_blank" onSubmit={sendMessage}>
             <label>
               {content.contact.nameLabel}
               <input name="name" autoComplete="name" />
             </label>
             <label>
               {content.contact.needLabel}
-              <textarea name="need" rows={3} />
+              <textarea name="text" rows={3} required />
             </label>
             <button className="primary-cta" type="submit">
               {content.contact.submit}

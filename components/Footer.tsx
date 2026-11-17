@@ -25,13 +25,12 @@ export function Footer() {
   return (
     <footer ref={ref} className="site-footer">
       <p>{content.footer.text}</p>
-      <nav className="footer-social" aria-label="Social">
-        <a href="https://x.com/AgentHope__" className="social-link" target="_blank" rel="noopener noreferrer" aria-label="X @AgentHope__">
+      <nav className="footer-social" aria-label={content.footer.social}>
+        <a href="https://x.com/AgentHope__" className="social-link" target="_blank" rel="noopener noreferrer" aria-label={content.footer.xLabel}>
           X
         </a>
-        {/* TODO: Claim @hopetheorylabs on Instagram and Facebook, then add links here */}
       </nav>
-      <span>HTL / END OF TRANSMISSION</span>
+      <span>{content.footer.signoff}</span>
     </footer>
   );
 }

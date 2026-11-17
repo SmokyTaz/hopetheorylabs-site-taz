@@ -1,8 +1,11 @@
+"use client";
+
+import { Heading, type HeadingLevel } from "./Heading";
 import { SectionMarker } from "./SectionMarker";
 import { WhatsAppCta } from "./WhatsAppCta";
 import { useContent } from "./LanguageProvider";
 
-export function FeatureGrid() {
+export function FeatureGrid({ headingLevel = 2 }: { headingLevel?: HeadingLevel }) {
   const content = useContent();
   const { services } = content;
 
@@ -16,7 +19,7 @@ export function FeatureGrid() {
       <div className="services-inner services-inner-html">
         <div className="services-intro scene-copy">
           <p className="eyebrow">{services.eyebrow}</p>
-          <h2 id="services-heading">{services.heading}</h2>
+          <Heading level={headingLevel} id="services-heading">{services.heading}</Heading>
           <p className="services-intro-text">{services.intro}</p>
           <div className="services-lanes">
             <div id="services-website" className="services-lane">

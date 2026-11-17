@@ -12,6 +12,8 @@ function GamePreview({
   return (
     <div className="game-preview" role="group" aria-label={imageAlt}>
       <div className="game-preview-bezel">
+        {/* Static export: next/image optimisation is off (images.unoptimized), so a plain img is the honest choice. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="game-preview-shot" src={imageSrc} alt={imageAlt} width={640} height={360} loading="lazy" decoding="async" />
         <div className="game-preview-scan" aria-hidden="true" />
       </div>
@@ -27,12 +29,13 @@ function PhoneDemo({
   items,
   cta,
   message,
+  aria,
 }: NonNullable<WorkCaseStudy["phoneDemo"]>) {
   return (
     <div
       className="phone-mockup"
       role="img"
-      aria-label={`Illustrative phone mockup for ${storeName}: ${items.join(", ")}`}
+      aria-label={aria}
     >
       <div className="phone-top">
         <span>09:41</span>

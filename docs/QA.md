@@ -58,7 +58,7 @@ Target: **90+** in all four categories when feasible. Record via `npm run perf:l
 
 ## Build and deploy
 
-- [ ] `npm run lint`, `npm run typecheck`, `npm run build` pass
+- [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e` pass (CI runs all five)
 - [ ] Static export in `out/`; `vercel.json` security headers present
 - [ ] Production deploy on `main` matches expected commit (Vercel dashboard)
 

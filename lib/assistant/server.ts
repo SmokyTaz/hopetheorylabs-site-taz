@@ -1,8 +1,8 @@
 /*
  * Server helpers for the two Vercel Functions in `api/`.
  *
- * No SDKs and no node: built-ins — Supabase/Resend via fetch only, so the
- * function bootstraps on both Node and Edge-style runtimes.
+ * No SDKs and no node: built-ins — Supabase/Resend via fetch and hashing via
+ * Web Crypto, so the functions bootstrap on both Node and Edge-style runtimes.
  */
 import { en } from "../../content/en";
 
@@ -26,20 +26,18 @@ export async function readJson(request: Request): Promise<Record<string, unknown
   }
 }
 
-/** Stable non-cryptographic fingerprint of the client IP (rate limit only). */
-function fingerprint(input: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-
-export function clientKey(request: Request): string {
+/**
+ * Salted SHA-256 of the client IP, so the rate-limit table never holds an
+ * address. Vercel sets `x-forwarded-for` itself (it overwrites any value the
+ * client sends), so the first entry is the real client IP there.
+ */
+export async function clientKey(request: Request, scope: "chat" | "lead"): Promise<string> {
   const forwarded = request.headers.get("x-forwarded-for") ?? "";
   const ip = forwarded.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-  return fingerprint(`hope-theory-labs:${ip}`);
+  const salt = process.env.RATE_LIMIT_SALT || "hope-theory-labs";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${ip}`));
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${scope}:${hex.slice(0, 32)}`;
 }
 
 const LOCAL = new Map<string, number[]>();
@@ -105,19 +103,34 @@ async function insertRow(table: string, row: Record<string, unknown>): Promise<b
   }
 }
 
+/** Deletes rate-limit rows older than a day (migration `prune_rate_limit_hits`). */
+async function pruneRateLimitHits(): Promise<void> {
+  const client = supabase();
+  if (!client) return;
+  try {
+    await fetch(`${client.url}/rest/v1/rpc/prune_rate_limit_hits`, {
+      method: "POST",
+      headers: supabaseHeaders(client.key),
+      body: "{}",
+      signal: AbortSignal.timeout(6000),
+    });
+  } catch {
+    // Pruning is housekeeping; the next sampled request retries.
+  }
+}
+
+/** One request in this many also prunes old rate-limit rows, so the table stays bounded. */
+const PRUNE_EVERY = 50;
+
 /** Soft distributed limit: local bucket first; when Supabase is set, record then count. */
 export async function overLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
-  try {
-    if (recordLocal(key, windowMs) > limit) return true;
-    const client = supabase();
-    if (!client) return false;
-    await insertRow("rate_limit_hits", { key });
-    const since = new Date(Date.now() - windowMs).toISOString();
-    const shared = await countRows("rate_limit_hits", `key=eq.${key}&created_at=gte.${since}`);
-    return shared !== null && shared > limit;
-  } catch {
-    return false;
-  }
+  if (recordLocal(key, windowMs) > limit) return true;
+  if (!supabase()) return false;
+  await insertRow("rate_limit_hits", { key });
+  if (Math.random() < 1 / PRUNE_EVERY) void pruneRateLimitHits();
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const shared = await countRows("rate_limit_hits", `key=eq.${encodeURIComponent(key)}&created_at=gte.${since}`);
+  return shared !== null && shared > limit;
 }
 
 export interface Lead {
@@ -128,18 +141,19 @@ export interface Lead {
   lang?: string;
 }
 
-export async function saveLead(lead: Lead): Promise<boolean> {
-  try {
-    return await insertRow("leads", {
-      name: lead.name,
-      contact: lead.contact,
-      need: lead.need,
-      package: lead.packageName ?? null,
-      lang: lead.lang ?? "en",
-    });
-  } catch {
-    return false;
-  }
+export function saveLead(lead: Lead): Promise<boolean> {
+  return insertRow("leads", {
+    name: lead.name,
+    contact: lead.contact,
+    need: lead.need,
+    package: lead.packageName ?? null,
+    lang: lead.lang ?? "en",
+  });
+}
+
+/** Strip CR/LF so visitor text can't add lines to the email subject. */
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
 }
 
 export async function emailLead(lead: Lead): Promise<boolean> {
@@ -161,7 +175,7 @@ export async function emailLead(lead: Lead): Promise<boolean> {
       body: JSON.stringify({
         from: "onboarding@resend.dev",
         to: [to],
-        subject: `New website enquiry — ${lead.name}`,
+        subject: `New website enquiry — ${oneLine(lead.name)}`,
         text: lines.join("\n"),
       }),
       signal: AbortSignal.timeout(8000),
@@ -173,9 +187,5 @@ export async function emailLead(lead: Lead): Promise<boolean> {
 }
 
 export function logEvent(event: string, fields: Record<string, string | number | boolean | null>): void {
-  try {
-    console.log(JSON.stringify({ event, ...fields }));
-  } catch {
-    /* ignore */
-  }
+  console.log(JSON.stringify({ event, ...fields }));
 }

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   ci:
-    name: lint-typecheck-build
+    name: lint-typecheck-build-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +23,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies (high and critical fail the build)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
       - name: Report first-load JS (informational)
         run: npm run perf:first-load
         continue-on-error: true
-      - run: npm test
+      - name: Install Chromium for end-to-end tests
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

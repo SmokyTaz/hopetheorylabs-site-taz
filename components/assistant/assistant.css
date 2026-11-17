@@ -134,7 +134,7 @@
 }
 
 .asst-ok {
-  color: #7fd6c2;
+  color: var(--color-gold);
 }
 
 .asst-chips {
@@ -202,9 +202,25 @@
   cursor: default;
 }
 
+.asst-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 16px;
+  margin: 0 16px 10px;
+}
+
+.asst-links:empty {
+  display: none;
+}
+
 .asst-book {
   display: block;
-  margin: 0 16px 10px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
   text-align: center;
   color: var(--color-gold);
   font-size: 14px;

@@ -1,14 +1,14 @@
 import type { SiteContent } from "./types";
-import { whatsappAiLink, whatsappFor, whatsappLink, whatsappOrderLink } from "./types";
+import { CONTACT_EMAIL, whatsappAiLink, whatsappFor, whatsappLink, whatsappOrderLink } from "./types";
 
 export const en: SiteContent = {
   header: {
     wordmark: "Hope Theory Labs",
     nav: [
-      { label: "Approach", href: "#method" },
+      { label: "Approach", href: "/#method" },
       { label: "Services", href: "/services" },
       { label: "Pricing", href: "/pricing" },
-      { label: "Work", href: "#work" },
+      { label: "Work", href: "/#work" },
       { label: "Contact", href: "/contact" },
     ],
     whatsapp: "WhatsApp",
@@ -197,6 +197,7 @@ export const en: SiteContent = {
           items: ["RAW Classic papers", "Juicy Jay's Melon", "Rizla filter tips"],
           cta: "Order on WhatsApp",
           message: "Hi! I'd like to order: 1 × RAW Classic papers. Cash on delivery.",
+          aria: "Illustrative phone mockup of the Rollers Republic concept: a product list with an Order on WhatsApp button.",
         },
       },
       {
@@ -243,7 +244,7 @@ export const en: SiteContent = {
     eyebrow: "Contact", heading: "Begin the conversation.",
     note: "Tell us about your business and we'll reply on WhatsApp whenever suits you.",
     nameLabel: "Your name", needLabel: "What do you need?", submit: "Send on WhatsApp",
-    phone: "WhatsApp 01718463471", phoneHref: whatsappLink, email: "hopetheorybd@gmail.com",
+    phone: "WhatsApp 01718463471", phoneHref: whatsappLink, email: CONTACT_EMAIL,
     whatsappCta: "Message us on WhatsApp",
   },
   assistant: {
@@ -255,7 +256,7 @@ export const en: SiteContent = {
     placeholder: "Type your question",
     send: "Send",
     sending: "Sending…",
-    privacy: "Chats aren't stored. Details you submit are only used to reply to you.",
+    privacy: "Replies may come from an AI provider (Groq or Google Gemini) that processes what you type, so don't share sensitive details. Enquiries you save are only used to reply to you.",
     handoff: "I don't have that answer. Message us on WhatsApp and we'll reply there.",
     handoffCta: "Message us on WhatsApp",
     error: "That didn't go through. Try again, or message us on WhatsApp.",
@@ -268,6 +269,7 @@ export const en: SiteContent = {
       "Prepare an enquiry",
     ],
     booking: "Book a call",
+    enquiryCta: "Prepare an enquiry",
     enquiry: {
       name: "What's your name?",
       contact: "Best WhatsApp number or email?",
@@ -280,6 +282,9 @@ export const en: SiteContent = {
       saved: "Saved. We'll reply on WhatsApp.",
       saveFailed: "Couldn't save that just now. Send it on WhatsApp instead.",
       required: "Please fill this in.",
+      invalidContact: "That doesn't look like a phone number or email. Try again, e.g. 01712345678.",
+      next: "Next",
+      edit: "Edit",
       emailSubject: "Website enquiry — Hope Theory Labs",
       back: "Back to chat",
     },
@@ -287,7 +292,18 @@ export const en: SiteContent = {
   footer: {
     text: "© 2026 Hope Theory Labs · Dhaka, Bangladesh · from the Hope Theory family. No cookies, no analytics.",
     ticker: ["Email", "CRM", "Billing", "Docs", "Chat", "Storefront", "Support"],
+    signoff: "HTL / END OF TRANSMISSION",
+    social: "Social",
+    xLabel: "X @AgentHope__",
   },
+  notFound: {
+    kicker: "404 / Not found",
+    heading: "This page doesn't exist.",
+    text: "The rest of Hope Theory Labs is still here.",
+    home: "Go home",
+    whatsapp: "Message us on WhatsApp",
+  },
+  quickContact: "Quick contact",
   studio: {
     introWordmark: "Hope Theory Labs",
     introCue: "Calibrating intelligence core",
