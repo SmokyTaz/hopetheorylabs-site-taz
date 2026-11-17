@@ -60,7 +60,8 @@ export function AssistantLauncher({ copy, whatsapp, email, calcomUrl }: Assistan
           calcomUrl={calcomUrl}
           onClose={() => {
             setOpen(false);
-            buttonRef.current?.focus();
+            // Next frame: the panel's cleanup has lifted `inert` from the button by then.
+            requestAnimationFrame(() => buttonRef.current?.focus());
           }}
         />
       ) : null}

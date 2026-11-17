@@ -1,10 +1,11 @@
 "use client";
 
+import { Heading, type HeadingLevel } from "./Heading";
 import { SectionMarker } from "./SectionMarker";
 import { WhatsAppCta } from "./WhatsAppCta";
 import { useContent } from "./LanguageProvider";
 
-export function PricingSection() {
+export function PricingSection({ headingLevel = 2 }: { headingLevel?: HeadingLevel }) {
   const { pricing } = useContent();
 
   return (
@@ -12,7 +13,7 @@ export function PricingSection() {
       <SectionMarker index="006B" />
       <div className="pricing-inner">
         <p className="eyebrow">{pricing.eyebrow}</p>
-        <h2 id="pricing-heading">{pricing.heading}</h2>
+        <Heading level={headingLevel} id="pricing-heading">{pricing.heading}</Heading>
         <p className="pricing-intro">{pricing.intro}</p>
 
         <ul className="pricing-tiers" role="list">
@@ -21,7 +22,7 @@ export function PricingSection() {
             return (
               <li key={tier.name} className={`pricing-card${tier.badge ? " is-featured" : ""}`} aria-labelledby={id}>
                 {tier.badge ? <p className="pricing-badge">{tier.badge}</p> : null}
-                <h3 id={id} className="pricing-name">{tier.name}</h3>
+                <Heading level={headingLevel + 1} id={id} className="pricing-name">{tier.name}</Heading>
                 <p className="pricing-subtitle">{tier.subtitle}</p>
                 <p className="pricing-price">{tier.price}</p>
                 <ul className="pricing-features" role="list">
@@ -38,18 +39,18 @@ export function PricingSection() {
         <div className="pricing-terms">
           <p className="pricing-founding">{pricing.founding}</p>
           <p>{pricing.payment}</p>
-          <h3 className="pricing-subhead">{pricing.addOnsHeading}</h3>
+          <Heading level={headingLevel + 1} className="pricing-subhead">{pricing.addOnsHeading}</Heading>
           <ul className="pricing-addons" role="list">
             {pricing.addOns.map((a) => <li key={a.label}><span>{a.label}</span><b>{a.price}</b></li>)}
           </ul>
         </div>
 
-        <h3 className="pricing-subhead pricing-ai-heading">{pricing.aiHeading}</h3>
+        <Heading level={headingLevel + 1} className="pricing-subhead pricing-ai-heading">{pricing.aiHeading}</Heading>
         <ul className="pricing-ai" role="list">
           {pricing.aiCards.map((card) => (
             <li key={card.title} className="pricing-card pricing-card-ai">
               <p className="pricing-badge pricing-badge-quiet">{card.tag}</p>
-              <h4 className="pricing-name">{card.title}</h4>
+              <Heading level={headingLevel + 2} className="pricing-name">{card.title}</Heading>
               <p className="pricing-price pricing-price-ask">{card.price}</p>
               <p className="pricing-for">{card.description}</p>
               <WhatsAppCta href={card.whatsappLink} className="pricing-cta">{card.cta}</WhatsAppCta>

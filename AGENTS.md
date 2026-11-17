@@ -12,7 +12,7 @@ You are a coding agent building the Hope Theory Labs website. Everything you nee
 
 - Branch from `main` named `issue-<n>` or a short descriptive name (e.g. `docs/final-polish`).
 - Do only what the task asks. Meet every acceptance criterion.
-- Run `npm run lint && npm run typecheck && npm run build` before pushing. If you change the assistant or `api/*`, also run `npm test`.
+- Run `npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e` before pushing (CI runs the same).
 - Open a PR that links the issue when applicable (`Closes #<n>`), fill in the PR template checklist, and include the Vercel preview URL and Lighthouse mobile scores when UI changed.
 - **Never touch `main` directly**: no direct pushes, no force-pushes, no merging your own PR.
 

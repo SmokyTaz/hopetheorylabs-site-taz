@@ -3,6 +3,32 @@
 **Production URL:** https://hopetheorylabs.vercel.app  
 **Architecture:** Next.js static export · WebGL on capable desktops · SVG core on mobile / fallback.
 
+## Audit and fixes — 17 Nov 2026
+
+Measured on this branch's `out/`, served by `scripts/serve-out.mjs` (vercel.json headers + gzip), Chromium 1.63 / Lighthouse 12.6.1 mobile. Earlier numbers below were taken before the assistant and the route split.
+
+| Check | Result |
+| --- | --- |
+| `npm run lint` / `typecheck` / `build` | pass (0 errors, 0 warnings) |
+| `npm test` (real handlers, `scripts/test-api.mjs`) | **30 / 30** — same suite on old `main`: 19 / 30 |
+| `npm run test:e2e` (`scripts/e2e.mjs`) | **22 / 22** — same suite on old `main`: 5 / 22 |
+| `npm audit --omit=dev` | 0 vulnerabilities (Next 16.4.6) |
+| `rg -i "teal\|14b8a6\|2dd4bf\|7fd6c2\|0f766e" app components content` | no matches (was 1: `assistant.css`) |
+
+| Route | Perf | A11y | BP | SEO | LCP | CLS |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/` | 97 | 100 | 100 | 100 | 2.4 s | 0 |
+| `/about` | 98 | 100 | 100 | 100 | 2.3 s | 0 |
+| `/services` | 98 | 100 | 100 | 100 | 2.3 s | 0 |
+| `/pricing` | 98 | 100 | 100 | 100 | 2.3 s | 0 |
+| `/contact` | 98 | 100 | 100 | 100 | 2.3 s | 0 |
+
+Before the fixes `/about` and `/pricing` scored 95/96 accessibility (section-marker contrast 4.12:1), and `/services` had CLS 0.099 (`content-visibility:auto` with a 480px placeholder on the on-screen section; fixed in globals.css).
+
+First-load JS (`npm run perf:first-load`): 190.8 KB gzip critical path — over the legacy 120 KB target, which QA.md tracks for regression only; Lighthouse 90+ is the gate.
+
+**Still not verified:** root `api/` functions on a Vercel preview (see docs/ASSISTANT.md, Deployment note); real Groq/Gemini replies with the new default models (needs keys); Safari/Firefox/real devices; Bangla copy review. Known console warning on the WebGL path: `THREE.Clock` deprecation, raised inside @react-three/fiber 9.8.2 (latest stable), not this repo.
+
 ## Automated checks — 26 Oct 2026 (Asia/Dhaka)
 
 - [x] `npm run lint` on release branch

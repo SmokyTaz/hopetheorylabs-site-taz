@@ -1,4 +1,4 @@
-The locked homepage in `docs/SPEC.md` overrides this file where they disagree. That page uses background `#07090C`, Instrument Sans, Newsreader, and JetBrains Mono, with the gold accent `#B8892F` (plus the warm highlight `#FFBD61`). Teal is retired — see Color.
+The locked homepage in `docs/SPEC.md` overrides this file where they disagree. That page uses background `#07090C`, Instrument Sans, Newsreader, and the system monospace stack, with the gold accent `#B8892F` (plus the warm highlight `#FFBD61`). Teal is retired — see Color.
 
 ## Architecture terms (neutral, reviewable)
 
@@ -19,8 +19,8 @@ The locked homepage in `docs/SPEC.md` overrides this file where they disagree. T
 
 ## Typography
 
-- Headings: Space Grotesk 600/700
-- Body: Inter 400/600
+- Headings: Newsreader 400 (editorial serif)
+- Body/UI: Instrument Sans 400
 - Mono labels: system monospace stack (ui-monospace, SFMono-Regular, Menlo, Consolas) — no mono webfont
 - Bangla: Hind Siliguri 400/600
 

@@ -9,10 +9,13 @@ export interface AssistantCopy {
   inputLabel: string; placeholder: string; send: string; sending: string;
   privacy: string; handoff: string; handoffCta: string; error: string;
   rateLimited: string; tooLong: string; chips: string[]; booking: string;
+  /** Always-visible entry to the enquiry flow (the chips disappear after the first message). */
+  enquiryCta: string;
   enquiry: {
     name: string; contact: string; need: string; summary: string;
     sendWhatsApp: string; email: string; save: string; saving: string;
-    saved: string; saveFailed: string; required: string; emailSubject: string; back: string;
+    saved: string; saveFailed: string; required: string; invalidContact: string;
+    next: string; edit: string; emailSubject: string; back: string;
   };
 }
 
@@ -39,6 +42,8 @@ export interface WorkCaseStudy {
     items: string[];
     cta: string;
     message: string;
+    /** Accessible name for the mockup; the visible strings are decorative. */
+    aria: string;
   };
 }
 
@@ -123,17 +128,23 @@ export interface SiteContent {
     submit: string; phone: string; phoneHref: string; email: string; whatsappCta: string;
   };
   assistant: AssistantCopy;
-  footer: { text: string; ticker: string[] };
+  footer: { text: string; ticker: string[]; signoff: string; social: string; xLabel: string };
+  notFound: { kicker: string; heading: string; text: string; home: string; whatsapp: string };
+  /** Accessible name for the floating quick-contact region. */
+  quickContact: string;
   studio: {
     introWordmark: string;
     introCue: string;
     railLabel: string;
   };
 }
-export const whatsappOrderLink = "https://wa.me/8801718463471?text=Hi%20Hope%20Theory%20Labs%2C%20I%27d%20like%20a%20free%20website%20concept";
-export const whatsappAiLink =
-  "https://wa.me/8801718463471?text=Hi%20Hope%20Theory%20Labs%2C%20I%27d%20like%20to%20talk%20about%20AI%20integrations%20or%20transformation.";
-export const whatsappLink = "https://wa.me/8801718463471";
+/** The studio's WhatsApp number in E.164 form; every wa.me link and the JSON-LD derive from it. */
+export const WHATSAPP_E164 = "+8801718463471";
+export const CONTACT_EMAIL = "hopetheorybd@gmail.com";
+export const whatsappLink = `https://wa.me/${WHATSAPP_E164.slice(1)}`;
+/** WhatsApp link with an arbitrary prefilled message. */
+export const whatsappWith = (message: string) => `${whatsappLink}?text=${encodeURIComponent(message)}`;
+export const whatsappOrderLink = whatsappWith("Hi Hope Theory Labs, I'd like a free website concept");
+export const whatsappAiLink = whatsappWith("Hi Hope Theory Labs, I'd like to talk about AI integrations or transformation.");
 /** WhatsApp link with prefilled text naming a pricing tier or service. */
-export const whatsappFor = (topic: string) =>
-  `https://wa.me/8801718463471?text=${encodeURIComponent(`Hi Hope Theory Labs, I'm interested in ${topic}.`)}`;
+export const whatsappFor = (topic: string) => whatsappWith(`Hi Hope Theory Labs, I'm interested in ${topic}.`);

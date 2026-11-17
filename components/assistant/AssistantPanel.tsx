@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AssistantCopy } from "@/content/types";
 import { matchFaq } from "@/lib/assistant/kb";
+import {
+  MAX_CONTACT_CHARS,
+  MAX_MESSAGE_CHARS,
+  MAX_NAME_CHARS,
+  MAX_NEED_CHARS,
+  hasBangla,
+  isContact,
+} from "@/lib/assistant/validate";
 
 export interface AssistantPanelProps {
   copy: AssistantCopy;
@@ -18,39 +26,97 @@ interface Bubble {
   id: number;
   role: Role;
   content: string;
+  /** Greeting and status notices: shown, never sent to the model. */
+  local?: boolean;
 }
 type Step = "name" | "contact" | "need" | "summary";
+type Field = Exclude<Step, "summary">;
+interface Enquiry {
+  name: string;
+  contact: string;
+  need: string;
+}
 
-const MAX_CHARS = 1000;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE = /^\+?[\d][\d\s()\-]{6,19}$/;
+const STEPS: Field[] = ["name", "contact", "need"];
+const FIELD_LIMIT: Record<Field, number> = {
+  name: MAX_NAME_CHARS,
+  contact: MAX_CONTACT_CHARS,
+  need: MAX_NEED_CHARS,
+};
 
-function hasBangla(text: string): boolean {
-  return /[\u0980-\u09FF]/.test(text);
+/*
+ * Conversation state lives at module scope so closing and reopening the panel
+ * (which unmounts it) keeps the chat and any half-finished enquiry for the
+ * rest of the page visit. Nothing is written to storage.
+ */
+interface Session {
+  bubbles: Bubble[];
+  enquiry: Enquiry;
+  delivered: boolean;
+}
+let session: Session | null = null;
+let bubbleCounter = 1;
+const nextBubbleId = () => bubbleCounter++;
+
+function startSession(intro: string): Session {
+  session ??= {
+    bubbles: [{ id: 0, role: "assistant", content: intro, local: true }],
+    enquiry: { name: "", contact: "", need: "" },
+    delivered: false,
+  };
+  return session;
+}
+
+/** While the dialog is open, everything else on the page is inert (not focusable, hidden from AT). */
+function useInertBackground(panel: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const root = panel.current;
+    if (!root) return;
+    const others = Array.from(document.body.children).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement && !node.contains(root) && !node.inert,
+    );
+    for (const node of others) node.inert = true;
+    return () => {
+      for (const node of others) node.inert = false;
+    };
+  }, [panel]);
 }
 
 export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClose }: AssistantPanelProps) {
-  const [bubbles, setBubbles] = useState<Bubble[]>([{ id: 0, role: "assistant", content: copy.intro }]);
+  const saved = startSession(copy.intro);
+  const [bubbles, setBubbles] = useState<Bubble[]>(saved.bubbles);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"chat" | "enquiry">("chat");
   const [step, setStep] = useState<Step>("name");
-  const [form, setForm] = useState({ name: "", contact: "", need: "" });
+  const [form, setForm] = useState<Enquiry>(saved.enquiry);
   const [field, setField] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [saving, setSaving] = useState(false);
+  const [delivered, setDelivered] = useState(saved.delivered);
   const [note, setNote] = useState<{ kind: "saved" | "failed"; text: string } | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
-  const nextId = useRef(1);
   const panelRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
   const summaryRef = useRef<HTMLAnchorElement>(null);
 
-  const push = useCallback((role: Role, content: string) => {
-    setBubbles((current) => [...current, { id: nextId.current++, role, content }]);
+  useInertBackground(panelRef);
+
+  // Mirror state into the module-level session so it survives unmounting.
+  useEffect(() => {
+    if (session) {
+      session.bubbles = bubbles;
+      session.enquiry = form;
+      session.delivered = delivered;
+    }
+  }, [bubbles, form, delivered]);
+
+  const push = useCallback((role: Role, content: string, local = false) => {
+    const id = nextBubbleId();
+    setBubbles((current) => [...current, { id, role, content, local }]);
   }, []);
 
   useEffect(() => {
@@ -105,12 +171,13 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
   const send = async (raw: string) => {
     const message = raw.trim();
     if (!message || busy) return;
-    if (message.length > MAX_CHARS) {
+    if (message.length > MAX_MESSAGE_CHARS) {
       setWarning(copy.tooLong);
       return;
     }
     setWarning(null);
-    const history: Bubble[] = [...bubbles, { id: nextId.current++, role: "user", content: message }];
+    const id = nextBubbleId();
+    const history: Bubble[] = [...bubbles, { id, role: "user", content: message }];
     setBubbles(history);
     setDraft("");
     setBusy(true);
@@ -119,62 +186,67 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          messages: history.slice(-12).map(({ role, content }) => ({ role, content })),
+          messages: history
+            .filter((bubble) => !bubble.local)
+            .slice(-12)
+            .map(({ role, content }) => ({ role, content })),
         }),
       });
       if (response.status === 429) {
-        push("assistant", copy.rateLimited);
+        push("assistant", copy.rateLimited, true);
         return;
       }
-      if (!response.ok) throw new Error("chat_failed");
+      if (!response.ok) throw new Error(`chat_${response.status}`);
       const data = (await response.json()) as { reply?: string };
-      push("assistant", data.reply?.trim() || copy.error);
+      const reply = data.reply?.trim();
+      if (reply) push("assistant", reply);
+      else push("assistant", copy.error, true);
     } catch {
+      // Offline, or the function isn't deployed: answer from the same FAQ the server would use.
       push("assistant", matchFaq(message).reply);
     } finally {
       setBusy(false);
     }
   };
 
+  const goToStep = (next: Step) => {
+    setStep(next);
+    setField(next === "summary" ? "" : form[next]);
+    setWarning(null);
+  };
+
   const startEnquiry = () => {
     setMode("enquiry");
-    setStep("name");
-    setField("");
     setNote(null);
-    setWarning(null);
+    goToStep(form.name && form.contact && form.need ? "summary" : "name");
   };
 
   const leaveEnquiry = () => {
     setMode("chat");
-    setStep("name");
-    setField("");
     setNote(null);
     setWarning(null);
   };
 
   const nextStep = (event: React.FormEvent) => {
     event.preventDefault();
+    if (step === "summary") return;
     const value = field.trim();
     if (!value) {
       setWarning(copy.enquiry.required);
       return;
     }
-    if (step === "contact" && !EMAIL.test(value) && !PHONE.test(value)) {
-      setWarning(copy.enquiry.required);
+    if (step === "contact" && !isContact(value)) {
+      setWarning(copy.enquiry.invalidContact);
       return;
     }
-    setWarning(null);
-    if (step === "name") {
-      setForm((current) => ({ ...current, name: value }));
-      setStep("contact");
-    } else if (step === "contact") {
-      setForm((current) => ({ ...current, contact: value }));
-      setStep("need");
-    } else if (step === "need") {
-      setForm((current) => ({ ...current, need: value }));
-      setStep("summary");
+    const changed = form[step] !== value;
+    setForm((current) => ({ ...current, [step]: value }));
+    // Editing a saved enquiry makes it a new one.
+    if (changed) {
+      setDelivered(false);
+      setNote(null);
     }
-    setField("");
+    goToStep(STEPS[STEPS.indexOf(step) + 1] ?? "summary");
   };
 
   const summaryMessage = `Hi Hope Theory Labs, I'm ${form.name}. ${form.need} Contact: ${form.contact}`;
@@ -182,7 +254,7 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
   const mailtoHref = `mailto:${email}?subject=${encodeURIComponent(copy.enquiry.emailSubject)}&body=${encodeURIComponent(summaryMessage)}`;
 
   const saveEnquiry = async () => {
-    if (saving) return;
+    if (saving || delivered) return;
     setSaving(true);
     setNote(null);
     const lang = hasBangla(`${form.name} ${form.contact} ${form.need}`) ? "bn" : "en";
@@ -190,17 +262,15 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
       const response = await fetch("/api/lead", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          contact: form.contact,
-          need: form.need,
-          lang,
-          website: honeypot,
-        }),
+        body: JSON.stringify({ ...form, lang, website: honeypot }),
       });
-      const data = (await response.json().catch(() => null)) as { saved?: boolean } | null;
-      if (response.ok && data?.saved) setNote({ kind: "saved", text: copy.enquiry.saved });
-      else setNote({ kind: "failed", text: copy.enquiry.saveFailed });
+      const data = (await response.json().catch(() => null)) as { delivered?: boolean } | null;
+      if (response.ok && data?.delivered) {
+        setDelivered(true);
+        setNote({ kind: "saved", text: copy.enquiry.saved });
+      } else {
+        setNote({ kind: "failed", text: copy.enquiry.saveFailed });
+      }
     } catch {
       setNote({ kind: "failed", text: copy.enquiry.saveFailed });
     } finally {
@@ -208,8 +278,7 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
     }
   };
 
-  const stepQuestion =
-    step === "name" ? copy.enquiry.name : step === "contact" ? copy.enquiry.contact : copy.enquiry.need;
+  const stepQuestion = step === "summary" ? "" : copy.enquiry[step];
 
   return (
     <div
@@ -284,7 +353,7 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={copy.placeholder}
-              maxLength={MAX_CHARS}
+              maxLength={MAX_MESSAGE_CHARS}
               autoComplete="off"
             />
             <button type="submit" disabled={busy || !draft.trim()}>
@@ -292,11 +361,18 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
             </button>
           </form>
 
-          {calcomUrl ? (
-            <a className="asst-book" href={calcomUrl} target="_blank" rel="noopener noreferrer">
-              {copy.booking}
-            </a>
-          ) : null}
+          <div className="asst-links">
+            {bubbles.length > 1 ? (
+              <button type="button" className="asst-book" onClick={startEnquiry}>
+                {copy.enquiryCta}
+              </button>
+            ) : null}
+            {calcomUrl ? (
+              <a className="asst-book" href={calcomUrl} target="_blank" rel="noopener noreferrer">
+                {copy.booking}
+              </a>
+            ) : null}
+          </div>
         </>
       ) : (
         <div className="asst-enq">
@@ -304,18 +380,12 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
             <>
               <p className="asst-step">{copy.enquiry.summary}</p>
               <dl className="asst-sum">
-                <div>
-                  <dt>{copy.enquiry.name}</dt>
-                  <dd>{form.name}</dd>
-                </div>
-                <div>
-                  <dt>{copy.enquiry.contact}</dt>
-                  <dd>{form.contact}</dd>
-                </div>
-                <div>
-                  <dt>{copy.enquiry.need}</dt>
-                  <dd>{form.need}</dd>
-                </div>
+                {STEPS.map((key) => (
+                  <div key={key}>
+                    <dt>{copy.enquiry[key]}</dt>
+                    <dd>{form[key]}</dd>
+                  </div>
+                ))}
               </dl>
               <div className="asst-acts">
                 <a
@@ -330,13 +400,26 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
                 <a className="asst-btn" href={mailtoHref}>
                   {copy.enquiry.email}
                 </a>
-                <button type="button" className="asst-btn" onClick={() => void saveEnquiry()} disabled={saving}>
+                <button
+                  type="button"
+                  className="asst-btn"
+                  onClick={() => void saveEnquiry()}
+                  disabled={saving || delivered}
+                >
                   {saving ? copy.enquiry.saving : copy.enquiry.save}
+                </button>
+              </div>
+              <div className="asst-acts">
+                <button type="button" className="asst-btn" onClick={() => goToStep("name")}>
+                  {copy.enquiry.edit}
+                </button>
+                <button type="button" className="asst-btn" onClick={leaveEnquiry}>
+                  {copy.enquiry.back}
                 </button>
               </div>
             </>
           ) : (
-            <form className="asst-fstep" onSubmit={nextStep}>
+            <form className="asst-fstep" onSubmit={nextStep} noValidate>
               <label className="asst-step" htmlFor="asst-field">
                 {stepQuestion}
               </label>
@@ -345,13 +428,13 @@ export default function AssistantPanel({ copy, whatsapp, email, calcomUrl, onClo
                 ref={fieldRef}
                 value={field}
                 onChange={(event) => setField(event.target.value)}
-                autoComplete={step === "name" ? "name" : step === "contact" ? "tel" : "off"}
-                inputMode={step === "contact" ? "email" : undefined}
-                maxLength={step === "need" ? 600 : 120}
+                autoComplete={step === "name" ? "name" : "off"}
+                aria-invalid={warning ? true : undefined}
+                maxLength={FIELD_LIMIT[step]}
               />
               <div className="asst-acts">
                 <button type="submit" className="asst-btn asst-primary">
-                  {copy.send}
+                  {copy.enquiry.next}
                 </button>
                 <button type="button" className="asst-btn" onClick={leaveEnquiry}>
                   {copy.enquiry.back}

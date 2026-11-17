@@ -5,22 +5,34 @@
  * matcher in `lib/assistant/kb.ts`. The last step needs no key at all, so the
  * chat keeps answering with nothing configured.
  *
- * Handlers never throw: cold-start and provider errors fall back to FAQ/handoff.
+ * Model IDs come from GROQ_MODEL / GEMINI_MODEL so a provider retiring a model
+ * is an env change, not a deploy. Providers retire free-tier models often:
+ * llama-3.1-8b-instant (Groq, Aug 2026) and gemini-2.0-flash (Jun 2026) both
+ * went this way.
+ *
+ * Handlers never throw: provider errors fall back to FAQ/handoff.
  */
 import { en } from "../content/en";
 import {
   HANDOFF_REPLY,
   buildSystemPrompt,
-  hasBangla,
   matchFaq,
   unknownPrice,
 } from "../lib/assistant/kb";
 import { clientKey, jsonResponse, logEvent, overLimit, readJson } from "../lib/assistant/server";
+import { MAX_MESSAGE_CHARS, hasBangla } from "../lib/assistant/validate";
 
-export const maxDuration = 30;
+export const config = { maxDuration: 30 };
 
-const MAX_CHARS = 1000;
+export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+
+/** Longest reply we ever show; also the cap on assistant turns sent back to us. */
+const MAX_REPLY_CHARS = 1200;
 const MAX_TURNS = 12;
+/** Reasoning models spend part of this on hidden thinking; the 90-word rule keeps replies short. */
+const MAX_OUTPUT_TOKENS = 1024;
+const PROVIDER_TIMEOUT_MS = 12000;
 const WINDOW_MS = 10 * 60 * 1000;
 const MESSAGE_LIMIT = 20;
 
@@ -40,7 +52,7 @@ function sanitize(reply: string): string {
     .replace(/^\s*[-*•]\s+/gm, "")
     .replace(/\s{3,}/g, " ")
     .trim()
-    .slice(0, 1200);
+    .slice(0, MAX_REPLY_CHARS);
 }
 
 async function askGroq(turns: Turn[], system: string): Promise<string | null> {
@@ -51,12 +63,12 @@ async function askGroq(turns: Turn[], system: string): Promise<string | null> {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
+        model: process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL,
         temperature: 0.3,
-        max_tokens: 320,
+        max_tokens: MAX_OUTPUT_TOKENS,
         messages: [{ role: "system", content: system }, ...turns],
       }),
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
     if (!response.ok) {
       logEvent("chat.provider", { provider: "groq", status: response.status });
@@ -65,10 +77,9 @@ async function askGroq(turns: Turn[], system: string): Promise<string | null> {
     const data = (await response.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    const reply = text(data.choices?.[0]?.message?.content);
-    return reply || null;
-  } catch {
-    logEvent("chat.provider", { provider: "groq", status: 0 });
+    return text(data.choices?.[0]?.message?.content) || null;
+  } catch (error) {
+    logEvent("chat.provider", { provider: "groq", status: 0, error: String(error).slice(0, 120) });
     return null;
   }
 }
@@ -76,21 +87,23 @@ async function askGroq(turns: Turn[], system: string): Promise<string | null> {
 async function askGemini(turns: Turn[], system: string): Promise<string | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
+  const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        // Header, not ?key=: keeps the key out of URLs and request logs.
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: turns.map((turn) => ({
             role: turn.role === "assistant" ? "model" : "user",
             parts: [{ text: turn.content }],
           })),
-          generationConfig: { temperature: 0.3, maxOutputTokens: 320 },
+          generationConfig: { temperature: 0.3, maxOutputTokens: MAX_OUTPUT_TOKENS },
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       },
     );
     if (!response.ok) {
@@ -100,12 +113,28 @@ async function askGemini(turns: Turn[], system: string): Promise<string | null> 
     const data = (await response.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
-    const reply = text(data.candidates?.[0]?.content?.parts?.[0]?.text);
-    return reply || null;
-  } catch {
-    logEvent("chat.provider", { provider: "gemini", status: 0 });
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    return text(parts.map((part) => part.text ?? "").join("")) || null;
+  } catch (error) {
+    logEvent("chat.provider", { provider: "gemini", status: 0, error: String(error).slice(0, 120) });
     return null;
   }
+}
+
+/** Keeps well-formed turns, caps their size, and drops leading assistant turns (the panel's greeting). */
+function readTurns(messages: unknown[]): Turn[] | "too_long" {
+  const turns: Turn[] = [];
+  for (const item of messages.slice(-MAX_TURNS)) {
+    if (!item || typeof item !== "object") continue;
+    const role = (item as { role?: unknown }).role;
+    const content = text((item as { content?: unknown }).content);
+    if ((role !== "user" && role !== "assistant") || !content) continue;
+    if (content.length > (role === "user" ? MAX_MESSAGE_CHARS : MAX_REPLY_CHARS)) return "too_long";
+    turns.push({ role, content });
+  }
+  // Providers expect the conversation to open with the visitor.
+  while (turns[0]?.role === "assistant") turns.shift();
+  return turns;
 }
 
 export function GET(): Response {
@@ -113,37 +142,24 @@ export function GET(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  let question = "";
   try {
     const body = await readJson(request);
     if (!body || !Array.isArray(body.messages)) {
       return jsonResponse({ error: "bad_request" }, 400);
     }
 
-    const turns: Turn[] = [];
-    for (const item of body.messages.slice(-MAX_TURNS)) {
-      if (!item || typeof item !== "object") continue;
-      const role = (item as { role?: unknown }).role;
-      const content = text((item as { content?: unknown }).content);
-      if (role !== "user" && role !== "assistant") continue;
-      if (!content) continue;
-      if (role === "user" && content.length > MAX_CHARS) {
-        return jsonResponse({ error: "too_long", message: en.assistant.tooLong }, 400);
-      }
-      turns.push({ role, content });
+    const turns = readTurns(body.messages);
+    if (turns === "too_long") {
+      return jsonResponse({ error: "too_long", message: en.assistant.tooLong }, 400);
     }
-
     const last = turns[turns.length - 1];
     if (!last || last.role !== "user") {
       return jsonResponse({ error: "bad_request" }, 400);
     }
+    question = last.content;
 
-    let limited = false;
-    try {
-      limited = await overLimit(clientKey(request), MESSAGE_LIMIT, WINDOW_MS);
-    } catch {
-      limited = false;
-    }
-    if (limited) {
+    if (await overLimit(await clientKey(request, "chat"), MESSAGE_LIMIT, WINDOW_MS)) {
       logEvent("chat.limited", { turns: turns.length });
       return jsonResponse(
         { error: "rate_limited", message: en.assistant.rateLimited, reply: en.assistant.rateLimited },
@@ -152,7 +168,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const system = buildSystemPrompt();
-    const lang = hasBangla(last.content) ? "bn" : "en";
+    const lang = hasBangla(question) ? "bn" : "en";
 
     let reply = await askGroq(turns, system);
     let source = "groq";
@@ -161,13 +177,12 @@ export async function POST(request: Request): Promise<Response> {
       source = "gemini";
     }
     if (!reply) {
-      const fallback = matchFaq(last.content);
+      const fallback = matchFaq(question);
       reply = fallback.reply;
       source = `faq:${fallback.id}`;
     }
 
-    const invented = unknownPrice(reply);
-    if (invented) {
+    if (unknownPrice(reply)) {
       logEvent("chat.price_guard", { source });
       reply = HANDOFF_REPLY;
       source = "guard";
@@ -181,16 +196,9 @@ export async function POST(request: Request): Promise<Response> {
     logEvent("chat.ok", { source, lang, turns: turns.length });
     return jsonResponse({ reply: clean, source, lang }, 200);
   } catch (error) {
-    logEvent("chat.crash", { status: 1 });
-    try {
-      const body = await readJson(request).catch(() => null);
-      const messages = body && Array.isArray(body.messages) ? body.messages : [];
-      const last = messages[messages.length - 1] as { content?: unknown } | undefined;
-      const content = typeof last?.content === "string" ? last.content : "";
-      const fallback = matchFaq(content || "help");
-      return jsonResponse({ reply: fallback.reply, source: `faq:${fallback.id}` }, 200);
-    } catch {
-      return jsonResponse({ reply: HANDOFF_REPLY, source: "handoff" }, 200);
-    }
+    // Last-resort net (e.g. Supabase or Web Crypto failing): answer from the FAQ.
+    logEvent("chat.crash", { error: String(error).slice(0, 200) });
+    const fallback = matchFaq(question || "help");
+    return jsonResponse({ reply: fallback.reply, source: `faq:${fallback.id}` }, 200);
   }
 }

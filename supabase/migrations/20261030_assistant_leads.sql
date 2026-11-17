@@ -36,8 +36,10 @@ create index if not exists rate_limit_hits_key_created_idx
   on public.rate_limit_hits (key, created_at desc);
 
 comment on table public.rate_limit_hits is
-  'Rate-limit counters. `key` is a salted SHA-256 of the visitor IP, never the address itself.';
+  'Rate-limit counters. `key` is "<chat|lead>:" + a salted SHA-256 of the visitor IP (RATE_LIMIT_SALT), never the address itself.';
 
+-- Called by lib/assistant/server.ts on about 1 in 50 rate-limited requests,
+-- so the table stays bounded without a scheduler.
 create or replace function public.prune_rate_limit_hits()
 returns void
 language sql

@@ -1,6 +1,6 @@
 # Hope Theory Labs — Website
 
-One-page marketing site for **Hope Theory Labs** (Dhaka). Primary conversion: start a WhatsApp conversation.
+Marketing site for **Hope Theory Labs** (Dhaka): the home narrative at `/` plus `/about`, `/services`, `/pricing` and `/contact`. Primary conversion: start a WhatsApp conversation.
 
 ## Live site
 
@@ -23,9 +23,11 @@ npm install
 npm run dev          # http://localhost:3000
 npm run lint
 npm run typecheck
+npm test             # assistant API + price guard, real handlers (no build needed)
 npm run build        # output in out/
-npm test             # assistant KB + API offline checks
-npx serve out        # optional static preview
+npm run test:e2e     # browser checks on out/: routes, a11y (axe), assistant states, no-JS, reduced motion
+npm run serve        # out/ on :4173 with vercel.json headers + gzip
+npm run perf:lighthouse  # build + mobile Lighthouse on every route
 ```
 
 Environment variables are optional; see [`.env.example`](.env.example) and [docs/ASSISTANT.md](docs/ASSISTANT.md).
@@ -49,7 +51,7 @@ Environment variables are optional; see [`.env.example`](.env.example) and [docs
 
 ## Architecture
 
-- `app/page.tsx` → page shell: sections, copy from `content/*.ts`.
+- `app/page.tsx` → home shell (`components/PageShell.tsx`); `app/{about,services,pricing,contact}/page.tsx` → `components/SubpageShell.tsx` + one section. Copy from `content/*.ts`; per-route metadata from `lib/metadata.ts`.
 - `components/experience/`: WebGL narrative after `window` `load`; SVG/canvas fallback when needed.
 - `components/assistant/`: gold bubble (first-load) + lazy panel; knowledge from `lib/assistant/kb.ts` bound to `content/en.ts`.
 - `api/chat.ts` / `api/lead.ts`: Groq → Gemini → FAQ; lead save (Supabase / Resend optional).
@@ -66,4 +68,4 @@ Security headers and caching: `vercel.json`.
 
 - Framework: Next.js; build `npm run build`; output `out/`.
 - Preview on every PR; production on merge to `main`.
-- Optional secrets: `GROQ_API_KEY`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `LEAD_NOTIFY_EMAIL`, `NEXT_PUBLIC_CALCOM_URL`.
+- Optional secrets: `GROQ_API_KEY`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RATE_LIMIT_SALT`. Optional config: `GROQ_MODEL`, `GEMINI_MODEL`, `LEAD_NOTIFY_EMAIL`, `NEXT_PUBLIC_CALCOM_URL`.

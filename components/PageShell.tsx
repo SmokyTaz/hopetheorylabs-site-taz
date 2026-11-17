@@ -29,7 +29,6 @@ function Shell() {
   const content = useContent();
   const { lang } = useLang();
   return <div data-lang={lang} className="site-shell">
-    <a href="#main" className="skip-link">{content.header.skip}</a>
     <Header />
     <HeaderScroll />
     <StudioAtmosphere />
@@ -48,7 +47,7 @@ function Shell() {
       <Reveal><Contact /></Reveal>
     </main>
     <Footer />
-    <StickyWhatsApp href={content.hero.whatsappLink} label={content.hero.primaryCta} />
+    <StickyWhatsApp href={content.hero.whatsappLink} label={content.hero.primaryCta} regionLabel={content.quickContact} />
     <div className="ambient-nodes" aria-hidden="true">
       {content.hero.coreNodes.map((node, i) => <span key={node} className={`ambient-node node-${i + 1}`}><i />{node}</span>)}
     </div>

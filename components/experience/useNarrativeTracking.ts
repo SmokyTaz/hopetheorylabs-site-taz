@@ -118,7 +118,8 @@ export function useNarrativeTracking() {
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", () => { pd = false; });
+    const onPointerCancel = () => { pd = false; };
+    window.addEventListener("pointercancel", onPointerCancel);
     document.documentElement.addEventListener("pointerleave", onPointerLeave);
     window.addEventListener("blur", onPointerLeave);
 
@@ -136,6 +137,7 @@ export function useNarrativeTracking() {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       document.documentElement.removeEventListener("pointerleave", onPointerLeave);
       window.removeEventListener("blur", onPointerLeave);
       ro?.disconnect();

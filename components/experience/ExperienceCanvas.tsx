@@ -133,7 +133,7 @@ export default function ExperienceCanvas({ initialTier, reduced, introStart, onR
       }}
     >
       <DemandBridge reduced={reduced} />
-      <ReadySignal onReady={onReady} failed={failed} />
+      <ReadySignal onReady={onReady} onFail={fail} failed={failed} />
       <IntelligenceScene
         tier={tier}
         reduced={reduced}
@@ -203,7 +203,15 @@ function DemandBridge({ reduced }: { reduced: boolean }) {
  * shader failed to link, so the fallback crossfades out only once there is
  * really something to look at.
  */
-function ReadySignal({ onReady, failed }: { onReady: () => void; failed: React.RefObject<boolean> }) {
+function ReadySignal({
+  onReady,
+  onFail,
+  failed,
+}: {
+  onReady: () => void;
+  onFail: (reason: string) => void;
+  failed: React.RefObject<boolean>;
+}) {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
@@ -214,7 +222,9 @@ function ReadySignal({ onReady, failed }: { onReady: () => void; failed: React.R
     try {
       gl.compile(scene, camera);
     } catch (error) {
+      // Without this the canvas would keep rendering but never go live or fall back.
       console.error("[experience] compile failed", error);
+      onFail("compile");
       return;
     }
     invalidate();
@@ -228,6 +238,6 @@ function ReadySignal({ onReady, failed }: { onReady: () => void; failed: React.R
       cancelled = true;
       window.cancelAnimationFrame(id);
     };
-  }, [gl, scene, camera, invalidate, onReady, failed]);
+  }, [gl, scene, camera, invalidate, onReady, onFail, failed]);
   return null;
 }

@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
+
 import { PageShell } from "@/components/PageShell";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: { url: "/" },
+};
 
 /*
   Server entry: statically exported. All rendering lives in <PageShell>
